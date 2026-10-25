@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hue Glow</title>
+<meta name="description" content="A colour picker that glows. Drag the bar, read the name, tap to copy the hex.">
+<meta property="og:title" content="Hue Glow">
+<meta property="og:description" content="A colour picker that glows. Drag the bar, read the name, tap to copy the hex.">
+<meta name="theme-color" content="#131418">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23131418'/%3E%3Cellipse cx='32' cy='60' rx='34' ry='26' fill='%234d5dff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;800&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: the whole screen is one glow card. Name and values top left, the hue bar pinned to the bottom. */
+:root {
+  --card: #131418;
+  --ink: #f6f1e8;
+  --muted: #9ea0ad;
+  --hairline: rgba(255,255,255,.1);
+  --c: hsl(240 100% 50%);
+  --tint: hsl(240 100% 72%);
+  --display: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--card); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5;
+  overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent;
+}
+.stage {
+  position: fixed; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+  cursor: ew-resize;
+}
+.glow {
+  position: absolute; inset: -10%; pointer-events: none;
+  background:
+    radial-gradient(45% 30% at 50% 105%, rgba(255,255,255,.8), transparent 70%),
+    radial-gradient(80% 60% at 50% 100%, var(--c), transparent 72%),
+    linear-gradient(to bottom, transparent 30%, color-mix(in srgb, var(--c) 30%, transparent) 65%, color-mix(in srgb, var(--c) 85%, transparent));
+  filter: blur(28px);
+  transition: background .2s linear;
+}
+.content {
+  position: absolute; left: 0; right: 0; top: 0;
+  padding-top: max(28px, env(safe-area-inset-top, 0px));
+  padding-left: max(24px, env(safe-area-inset-left, 0px));
+  padding-right: max(24px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 14px; justify-items: start;
+}
+.eyebrow { font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 {
+  margin: 0; font-family: var(--display); font-weight: 800; text-transform: uppercase; line-height: .92; letter-spacing: .005em;
+  font-size: clamp(64px, 18vw, 180px); text-wrap: balance;
+}
+.values { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 0; cursor: pointer; font: 600 14px var(--body); letter-spacing: .02em; font-variant-numeric: tabular-nums;
+  padding: 7px 12px; border-radius: 999px; color: var(--tint); background: color-mix(in srgb, var(--c) 20%, rgba(0,0,0,.35));
+  display: inline-flex; align-items: center; gap: 8px; transition: transform .1s ease;
+}
+.chip:active { transform: scale(.96); }
+.chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.chip.hex { font-size: 18px; padding: 8px 14px; }
+.chip small { font: 500 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink); opacity: .55; }
+.toast {
+  position: absolute; left: 50%; transform: translateX(-50%); top: max(16px, env(safe-area-inset-top, 0px));
+  font-family: var(--display); font-weight: 500; font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
+  padding: 8px 14px; border-radius: 999px; background: rgba(0,0,0,.55); color: var(--ink); border: 1px solid var(--hairline);
+  opacity: 0; transition: opacity .18s ease; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.hint {
+  position: absolute; right: max(24px, env(safe-area-inset-right, 0px)); bottom: calc(max(24px, env(safe-area-inset-bottom, 0px)) + 64px);
+  font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: rgba(246,241,232,.5);
+}
+.bar {
+  position: absolute; left: max(24px, env(safe-area-inset-left, 0px)); right: max(24px, env(safe-area-inset-right, 0px));
+  bottom: max(24px, env(safe-area-inset-bottom, 0px)); height: 44px; cursor: ew-resize; touch-action: none;
+}
+.bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 6px; border-radius: 999px; }
+.track {
+  position: absolute; left: 10px; right: 10px; top: 16px; height: 12px; border-radius: 999px;
+  background: linear-gradient(to right, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%));
+  box-shadow: 0 1px 0 rgba(255,255,255,.08), inset 0 0 0 1px rgba(0,0,0,.25);
+}
+.knob {
+  position: absolute; top: 10px; width: 24px; height: 24px; border-radius: 50%; margin-left: -2px;
+  background: var(--c); border: 3px solid var(--ink); box-shadow: 0 2px 10px rgba(0,0,0,.5), 0 0 18px color-mix(in srgb, var(--c) 70%, transparent);
+  transform: translateX(-50%); transition: box-shadow .15s ease;
+}
+.bar.dragging .knob { box-shadow: 0 2px 10px rgba(0,0,0,.5), 0 0 28px var(--c); }
+.foot {
+  position: absolute; left: max(24px, env(safe-area-inset-left, 0px)); bottom: calc(max(24px, env(safe-area-inset-bottom, 0px)) + 64px);
+  font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: rgba(246,241,232,.5);
+}
+.foot a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(246,241,232,.25); }
+@media (max-width: 480px) { .foot { display: none; } .chip.hex { font-size: 17px; } }
+@media (prefers-reduced-motion: reduce) { .glow, .chip, .knob, .toast { transition: none; } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="glow"></div>
+  <div class="content">
+    <p class="eyebrow">Hue Glow</p>
+    <h1 id="name">Blue</h1>
+    <div class="values">
+      <button class="chip hex" id="hex" type="button" aria-label="Copy hex">#0000FF <small>copy</small></button>
+      <button class="chip" id="rgb" type="button" aria-label="Copy RGB">rgb(0, 0, 255)</button>
+      <button class="chip" id="hsl" type="button" aria-label="Copy HSL">hsl(240, 100%, 50%)</button>
+      <button class="chip" id="link" type="button" aria-label="Copy link to this colour">link</button>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite">Copied</div>
+  <p class="foot">Drag anywhere, or the bar. Arrow keys nudge by one.</p>
+  <p class="hint" id="hint">240°</p>
+  <div class="bar" id="bar" role="slider" aria-label="Hue" aria-valuemin="0" aria-valuemax="359" aria-valuenow="240" tabindex="0">
+    <div class="track"></div>
+    <div class="knob" id="knob"></div>
+  </div>
+</div>
+<script>
+(function () {
+  var names = [[10,"Red"],[20,"Vermilion"],[35,"Orange"],[48,"Amber"],[65,"Yellow"],[80,"Lime"],[140,"Green"],[165,"Mint"],[175,"Teal"],[195,"Cyan"],[215,"Sky"],[235,"Azure"],[250,"Blue"],[265,"Indigo"],[285,"Violet"],[300,"Purple"],[320,"Magenta"],[340,"Pink"],[354,"Rose"],[360,"Red"]];
+  function hueName(h) { for (var i = 0; i < names.length; i++) if (h <= names[i][0]) return names[i][1]; return "Red"; }
+  function rgbOf(h) {
+    var x = 1 - Math.abs((h / 60) % 2 - 1), r = 0, g = 0, b = 0;
+    if (h < 60) { r = 1; g = x; } else if (h < 120) { r = x; g = 1; } else if (h < 180) { g = 1; b = x; }
+    else if (h < 240) { g = x; b = 1; } else if (h < 300) { r = x; b = 1; } else { r = 1; b = x; }
+    return [r, g, b].map(function (v) { return Math.round(v * 255); });
+  }
+  function hexOf(rgb) { return "#" + rgb.map(function (v) { return ("0" + v.toString(16).toUpperCase()).slice(-2); }).join(""); }
+
+  var root = document.documentElement, stage = document.getElementById("stage"), bar = document.getElementById("bar"), knob = document.getElementById("knob");
+  var nameEl = document.getElementById("name"), hexEl = document.getElementById("hex"), rgbEl = document.getElementById("rgb"), hslEl = document.getElementById("hsl");
+  var hint = document.getElementById("hint"), toast = document.getElementById("toast");
+  var hue = 240, hexText = "", rgbText = "", hslText = "";
+
+  function paint() {
+    var rgb = rgbOf(hue);
+    hexText = hexOf(rgb); rgbText = "rgb(" + rgb.join(", ") + ")"; hslText = "hsl(" + hue + ", 100%, 50%)";
+    root.style.setProperty("--c", "hsl(" + hue + " 100% 50%)");
+    root.style.setProperty("--tint", "hsl(" + hue + " 100% 74%)");
+    nameEl.textContent = hueName(hue);
+    hexEl.firstChild.nodeValue = hexText + " "; rgbEl.textContent = rgbText; hslEl.textContent = hslText;
+    hint.textContent = hue + "°";
+    knob.style.left = (10 + hue / 359 * (bar.clientWidth - 20)) + "px";
+    bar.setAttribute("aria-valuenow", hue);
+    document.title = hueName(hue) + " " + hexText + " · Hue Glow";
+    try { history.replaceState(null, "", "#h" + hue); } catch (e) {}
+  }
+  function setFromX(clientX) {
+    var r = bar.getBoundingClientRect();
+    hue = Math.round(Math.min(Math.max((clientX - r.left - 10) / (r.width - 20), 0), 1) * 359);
+    paint();
+  }
+  var down = false;
+  function start(e) { if (e.target.closest(".chip")) return; down = true; bar.classList.add("dragging"); setFromX(e.clientX); }
+  stage.addEventListener("pointerdown", function (e) { start(e); if (down) stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener("pointermove", function (e) { if (down) setFromX(e.clientX); });
+  stage.addEventListener("pointerup", function () { down = false; bar.classList.remove("dragging"); });
+  stage.addEventListener("pointercancel", function () { down = false; bar.classList.remove("dragging"); });
+  bar.addEventListener("keydown", function (e) {
+    var step = e.shiftKey ? 10 : 1;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") { hue = (hue - step + 360) % 360; paint(); e.preventDefault(); }
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") { hue = (hue + step) % 360; paint(); e.preventDefault(); }
+  });
+  window.addEventListener("resize", paint);
+
+  var toastTimer;
+  function copy(text, label) {
+    var done = function () {
+      toast.textContent = "Copied " + label; toast.classList.add("show");
+      clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); }); }
+    else fallback(text, done);
+  }
+  function fallback(text, done) {
+    var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {} finally { document.body.removeChild(ta); }
+  }
+  hexEl.addEventListener("click", function () { copy(hexText, hexText); });
+  rgbEl.addEventListener("click", function () { copy(rgbText, "RGB"); });
+  hslEl.addEventListener("click", function () { copy(hslText, "HSL"); });
+  document.getElementById("link").addEventListener("click", function () { copy(location.href.split("#")[0] + "#h" + hue, "link"); });
+
+  var m = /^#h(\d{1,3})$/.exec(location.hash || "");
+  if (m) hue = Math.min(parseInt(m[1], 10), 359);
+  paint();
+})();
+</script>
+</body>
+</html>
